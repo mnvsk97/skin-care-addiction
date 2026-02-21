@@ -152,7 +152,14 @@ server.tool(
       const searchQuery = String(queryResponse.content).trim().replace(/^["']|["']$/g, "");
 
       // Step 2: Call Shopify MCP to search catalog
-      const result = await callShopifyMCP("search_shop_catalog", { query: searchQuery });
+      const searchArgs: Record<string, any> = {
+        query: searchQuery,
+        context: `User is looking for skincare products for: ${labels.join(", ")}`,
+      };
+      if (price !== undefined) {
+        searchArgs.filters = [{ price: { max: price } }];
+      }
+      const result = await callShopifyMCP("search_shop_catalog", searchArgs);
 
       // Parse products from MCP response
       let products: any[] = [];
@@ -161,20 +168,14 @@ server.tool(
           if (block.type === "text" && block.text) {
             try {
               const parsed = JSON.parse(block.text);
-              products = Array.isArray(parsed) ? parsed : parsed.products || [];
+              products = Array.isArray(parsed)
+                ? parsed
+                : parsed.products || (parsed.product ? [parsed.product] : []);
             } catch {
               // text wasn't JSON, skip
             }
           }
         }
-      }
-
-      // Step 3: Apply optional price filter
-      if (price !== undefined) {
-        products = products.filter((p: any) => {
-          const minPrice = parseFloat(p.price_range?.min ?? p.price ?? "Infinity");
-          return minPrice <= price;
-        });
       }
 
       if (products.length === 0) {
@@ -274,7 +275,8 @@ server.tool(
         for (const block of result.content) {
           if (block.type === "text" && block.text) {
             try {
-              product = JSON.parse(block.text);
+              const parsed = JSON.parse(block.text);
+              product = parsed.product ?? parsed;
             } catch {
               // text wasn't JSON, skip
             }
