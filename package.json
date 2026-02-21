@@ -7,7 +7,9 @@
     "dev": "mcp-use dev",
     "build": "node build.mjs",
     "start": "node dist/index.js",
-    "deploy": "mcp-use deploy"
+    "login": "mcp-use login",
+    "deploy": "mcp-use deploy",
+    "deploy:cloud": "npm run build && mcp-use deploy"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",

@@ -64,10 +64,9 @@ server.tool(
     },
   },
   async ({ labels, price }) => {
-    let query = supabase
-      .from("products")
-      .select("*")
-      .overlaps("labels", labels);
+    const labelsLower = labels.map((l) => l.toLowerCase());
+
+    let query = supabase.from("products").select("*");
 
     if (price !== undefined) {
       query = query.lte("price", price);
@@ -79,7 +78,12 @@ server.tool(
       return error(`Failed to fetch products: ${dbError.message}`);
     }
 
-    if (!data || data.length === 0) {
+    // Case-insensitive label matching
+    const filtered = (data || []).filter((p) =>
+      p.labels.some((l: string) => labelsLower.includes(l.toLowerCase()))
+    );
+
+    if (filtered.length === 0) {
       const priceMsg = price !== undefined ? ` under $${price}` : "";
       return error(
         `No products found matching ${labels.join(", ")}${priceMsg}. Try broadening your filters.`
@@ -87,12 +91,12 @@ server.tool(
     }
 
     // Sort by number of matching labels (most relevant first)
-    const matches = data.sort((a, b) => {
+    const matches = filtered.sort((a, b) => {
       const aMatchCount = a.labels.filter((l: string) =>
-        labels.includes(l)
+        labelsLower.includes(l.toLowerCase())
       ).length;
       const bMatchCount = b.labels.filter((l: string) =>
-        labels.includes(l)
+        labelsLower.includes(l.toLowerCase())
       ).length;
       return bMatchCount - aMatchCount;
     });
@@ -120,33 +124,47 @@ server.tool(
   }
 );
 
-// --- get_personalized_product_description tool ---
+// --- product-detail tool ---
 
 server.tool(
   {
-    name: "get_personalized_product_description",
+    name: "product-detail",
+    title: "Show Product Details",
     description:
-      "Generate a personalized product description for a skincare product. Act like the best skincare sales associate and create a tailored description based on the product details and the user's skincare history/needs.",
+      "Use this tool when the user wants to see detailed information about a specific skincare product. IMPORTANT: Before calling this tool, the chatbot must act like the best skincare sales associate and generate a personalized product description based on the product's original description and the user's skincare history/concerns from the conversation. Write 2-3 engaging paragraphs explaining why this product is perfect for their skin concerns, then pass that personalized description in the personalized_description parameter.",
     schema: z.object({
-      product_description: z
+      product_id: z.number().describe("The ID of the product to show details for"),
+      product_name: z.string().describe("The name of the product"),
+      personalized_description: z
         .string()
         .describe(
-          "The original product description to personalize for the user."
+          "The AI-generated personalized description that explains why this product is perfect for the user's specific skin concerns"
         ),
+      labels: z.string().describe("Comma-separated skin condition labels"),
+      image_links: z.string().describe("Product image URL"),
+      product_link: z.string().describe("Product purchase link"),
+      price: z.string().describe("Product price"),
     }),
     widget: {
       name: "product-detail",
-      invoking: "Creating your personalized recommendation...",
-      invoked: "Recommendation ready",
+      invoking: "Loading product details...",
+      invoked: "Product details ready",
     },
   },
-  async ({ product_description }) => {
-    // Fallback: return the original description with a formatted wrapper
-    const personalized = `Personalized Recommendation\n\n${product_description}\n\nPro tip: Introduce this product gradually into your routine — start with 2-3 times per week and increase as your skin adjusts. Always pair with a broad-spectrum SPF during the day!`;
-
+  async ({ product_id, product_name, personalized_description, labels, image_links, product_link, price }) => {
     return widget({
-      props: { description: personalized },
-      output: text(personalized),
+      props: {
+        product_id,
+        product_name,
+        personalized_description,
+        labels,
+        image_links,
+        product_link,
+        price,
+      },
+      output: text(
+        `${product_name} — $${price}\n\n${personalized_description}\n\nLabels: ${labels}\nBuy: ${product_link}`
+      ),
     });
   }
 );
