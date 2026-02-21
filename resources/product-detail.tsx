@@ -6,14 +6,20 @@ import {
 } from "mcp-use/react";
 import { z } from "zod";
 
+const storeThemeSchema = z.object({
+  accent_color: z.string(),
+  store_name: z.string(),
+}).optional();
+
 const propsSchema = z.object({
-  product_id: z.number(),
+  product_id: z.string(),
   product_name: z.string(),
   personalized_description: z.string(),
   labels: z.string(),
   image_links: z.string(),
   product_link: z.string(),
   price: z.string(),
+  store_theme: storeThemeSchema,
 });
 
 export const widgetMetadata: WidgetMetadata = {
@@ -25,30 +31,32 @@ export const widgetMetadata: WidgetMetadata = {
 
 type Props = z.infer<typeof propsSchema>;
 
-function useColors() {
+function useColors(accentColor?: string) {
   const theme = useWidgetTheme();
+  const accent = accentColor || (theme === "dark" ? "#e8a87c" : "#c2703e");
+
   return {
-    bg: theme === "dark" ? "#1a1412" : "#fdf8f4",
-    card: theme === "dark" ? "#241e1a" : "#ffffff",
-    cardInner: theme === "dark" ? "#1e1814" : "#faf5ef",
-    text: theme === "dark" ? "#f0e8e0" : "#3d2b1f",
-    textSecondary: theme === "dark" ? "#b8a898" : "#7a6555",
-    border: theme === "dark" ? "#3a2e26" : "#efe5db",
-    accent: theme === "dark" ? "#e8a87c" : "#c2703e",
-    accentBg: theme === "dark" ? "#2e2218" : "#fef0e4",
-    badgeText: theme === "dark" ? "#e8a87c" : "#9a5830",
-    btnPrimary: theme === "dark" ? "#e8a87c" : "#c2703e",
-    btnPrimaryHover: theme === "dark" ? "#f0b88c" : "#a85c30",
+    bg: theme === "dark" ? "#141618" : "#f8f9fa",
+    card: theme === "dark" ? "#1e2024" : "#ffffff",
+    cardInner: theme === "dark" ? "#1a1c20" : "#f5f6f8",
+    text: theme === "dark" ? "#e8eaed" : "#2d3136",
+    textSecondary: theme === "dark" ? "#9aa0a8" : "#6b7280",
+    border: theme === "dark" ? "#2a2e34" : "#e5e7eb",
+    accent,
+    accentBg: theme === "dark" ? `${accent}1a` : `${accent}15`,
+    badgeText: theme === "dark" ? accent : accent,
+    btnPrimary: accent,
+    btnPrimaryHover: theme === "dark" ? `${accent}dd` : `${accent}cc`,
     btnPrimaryText: "#ffffff",
-    spinner: theme === "dark" ? "#e8a87c" : "#c2703e",
-    quoteBar: theme === "dark" ? "#e8a87c" : "#d4885a",
-    shadow: theme === "dark" ? "rgba(0,0,0,0.3)" : "rgba(150,120,90,0.1)",
+    spinner: accent,
+    quoteBar: accent,
+    shadow: theme === "dark" ? "rgba(0,0,0,0.3)" : "rgba(0,0,0,0.08)",
   };
 }
 
 export default function ProductDetail() {
   const { props, isPending, openExternal } = useWidget<Props>();
-  const colors = useColors();
+  const colors = useColors(props?.store_theme?.accent_color);
 
   if (isPending) {
     return (

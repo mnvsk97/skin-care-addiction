@@ -1,12 +1,8 @@
 import { MCPServer, widget, text, error } from "mcp-use/server";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
 import { ChatOpenAI } from "@langchain/openai";
 
-const supabase = createClient(
-  process.env.SUPABASE_PROJECT_URL!,
-  process.env.SUPABASE_ANON_KEY!
-);
+const SHOP_URL = process.env.SHOP_URL!;
 
 const server = new MCPServer({
   name: "skin-care-addiction",
@@ -15,34 +11,82 @@ const server = new MCPServer({
   baseUrl: process.env.MCP_URL || "http://localhost:3000",
 });
 
-// --- Skin condition labels ---
-
-const SKIN_LABELS = [
-  "Whiteheads",
-  "Blackheads",
-  "Cystic acne",
-  "Hormonal breakouts",
-  "Acne scarring",
-  "Textured skin",
-  "Large pores",
-  "Hyperpigmentation",
-  "Post-inflammatory hyperpigmentation",
-  "Melasma",
-  "Uneven skin tone",
-  "Wrinkles",
-  "Fine lines",
-  "Oily skin",
-  "Dry skin",
-  "Combination skin",
-  "Normal skin",
-] as const;
-
 const MAX_CAROUSEL_RESULTS = 10;
 
-/** Convert cents (stored in DB) to dollar string, e.g. 1499 → "14.99" */
-function formatPrice(cents: number): string {
-  return (cents / 100).toFixed(2);
+const llm = new ChatOpenAI({
+  model: "gpt-5-mini-2025-08-07",
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// --- Shopify MCP helpers ---
+
+async function callShopifyMCP(toolName: string, args: Record<string, any>): Promise<any> {
+  const url = `https://${SHOP_URL}/api/mcp`;
+  const body = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: "tools/call",
+    params: { name: toolName, arguments: args },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Shopify MCP error: ${res.status} ${res.statusText}`);
+  }
+
+  const json = await res.json();
+  if (json.error) {
+    throw new Error(`Shopify MCP error: ${json.error.message || JSON.stringify(json.error)}`);
+  }
+
+  return json.result;
 }
+
+// --- Store theme cache ---
+
+let storeThemeCache: { accent_color: string; store_name: string } | null = null;
+
+async function fetchStoreTheme(): Promise<{ accent_color: string; store_name: string }> {
+  if (storeThemeCache) return storeThemeCache;
+
+  let accentColor = "#116b65"; // fallback
+  let storeName = SHOP_URL.replace(/\.myshopify\.com$|\.com$/, "");
+
+  try {
+    const res = await fetch(`https://${SHOP_URL}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    const html = await res.text();
+
+    // Extract theme-color meta tag
+    const themeColorMatch = html.match(
+      /<meta\s+name=["']theme-color["']\s+content=["']([^"']+)["']/i
+    );
+    if (themeColorMatch) {
+      accentColor = themeColorMatch[1];
+    }
+
+    // Extract store name from <title> tag
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch) {
+      storeName = titleMatch[1].trim();
+    }
+  } catch (err: any) {
+    console.warn("Failed to fetch store theme, using defaults:", err?.message);
+  }
+
+  storeThemeCache = { accent_color: accentColor, store_name: storeName };
+  return storeThemeCache;
+}
+
+// Eagerly fetch theme on startup
+fetchStoreTheme().catch(() => {});
 
 // --- get-products tool ---
 
@@ -59,7 +103,7 @@ server.tool(
       "(2) If the user describes concerns in text, extract the relevant skin condition labels from their message. " +
       "(3) If the user's concern is vague or no skin condition can be determined, ask clarifying follow-up questions — do NOT guess or assume conditions. " +
       "(4) You may combine multiple labels to find products that target several concerns at once. " +
-      "Results are ranked by relevance (most matching labels first).",
+      "Results are ranked by relevance.",
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
@@ -68,12 +112,8 @@ server.tool(
       labels: z
         .array(z.string())
         .describe(
-          "One or more skin condition labels to filter products by. " +
-          "Supported values: 'Whiteheads', 'Blackheads', 'Cystic acne', 'Hormonal breakouts', " +
-          "'Acne scarring', 'Textured skin', 'Large pores', 'Hyperpigmentation', " +
-          "'Post-inflammatory hyperpigmentation', 'Melasma', 'Uneven skin tone', " +
-          "'Wrinkles', 'Fine lines', 'Oily skin', 'Dry skin', 'Combination skin', 'Normal skin'. " +
-          "Example: ['Oily skin', 'Large pores', 'Blackheads']"
+          "One or more skin condition labels describing the user's concerns. " +
+          "Examples: ['Oily skin', 'Large pores', 'Blackheads'], ['Dry skin', 'Wrinkles'], ['Acne scarring', 'Hyperpigmentation']"
         ),
       price: z
         .number()
@@ -89,79 +129,86 @@ server.tool(
     },
   },
   async ({ labels, price }) => {
-    // Validate labels against known values
-    const validLabelsLower = SKIN_LABELS.map((l) => l.toLowerCase());
-    const labelsLower = labels.map((l) => l.toLowerCase());
-    const invalidLabels = labels.filter(
-      (l) => !validLabelsLower.includes(l.toLowerCase())
-    );
-    if (invalidLabels.length > 0) {
-      return error(
-        `Unknown skin condition label(s): ${invalidLabels.join(", ")}. ` +
-          `Supported values: ${SKIN_LABELS.join(", ")}.`
-      );
-    }
-
     try {
-      let query = supabase.from("products").select("*");
+      // Step 1: Use LLM to convert skin condition labels into Shopify search keywords
+      const queryResponse = await llm.invoke([
+        {
+          role: "system",
+          content:
+            "You are a skincare product search expert. Convert the given skin condition labels into a concise Shopify search query. " +
+            "Shopify search is text-matching, NOT semantic. You must translate skin concerns into product types, ingredient names, and product keywords that would appear in product titles/descriptions. " +
+            "Output ONLY the search query string, nothing else. Keep it under 10 words. " +
+            "Examples:\n" +
+            '- ["Oily skin", "Blackheads"] → "oil control salicylic acid cleanser BHA"\n' +
+            '- ["Dry skin", "Wrinkles"] → "hyaluronic acid moisturizer anti-aging retinol"\n' +
+            '- ["Hyperpigmentation", "Uneven skin tone"] → "vitamin C brightening serum niacinamide"',
+        },
+        {
+          role: "user",
+          content: JSON.stringify(labels),
+        },
+      ]);
 
-      // Price is stored in cents — convert user's dollar amount to cents
+      const searchQuery = String(queryResponse.content).trim().replace(/^["']|["']$/g, "");
+
+      // Step 2: Call Shopify MCP to search catalog
+      const result = await callShopifyMCP("search_shop_catalog", { query: searchQuery });
+
+      // Parse products from MCP response
+      let products: any[] = [];
+      if (result?.content) {
+        for (const block of result.content) {
+          if (block.type === "text" && block.text) {
+            try {
+              const parsed = JSON.parse(block.text);
+              products = Array.isArray(parsed) ? parsed : parsed.products || [];
+            } catch {
+              // text wasn't JSON, skip
+            }
+          }
+        }
+      }
+
+      // Step 3: Apply optional price filter
       if (price !== undefined) {
-        query = query.lte("price", price * 100);
+        products = products.filter((p: any) => {
+          const minPrice = parseFloat(p.price_range?.min ?? p.price ?? "Infinity");
+          return minPrice <= price;
+        });
       }
 
-      const { data, error: dbError } = await query;
-
-      if (dbError) {
-        return error(`Failed to fetch products: ${dbError.message}`);
-      }
-
-      // Case-insensitive label matching
-      const filtered = (data || []).filter((p) =>
-        p.labels.some((l: string) => labelsLower.includes(l.toLowerCase()))
-      );
-
-      if (filtered.length === 0) {
+      if (products.length === 0) {
         const priceMsg = price !== undefined ? ` under $${price}` : "";
         return error(
           `No products found matching ${labels.join(", ")}${priceMsg}. Try broadening your filters.`
         );
       }
 
-      // Sort by number of matching labels (most relevant first)
-      const sorted = filtered.sort((a, b) => {
-        const aMatchCount = a.labels.filter((l: string) =>
-          labelsLower.includes(l.toLowerCase())
-        ).length;
-        const bMatchCount = b.labels.filter((l: string) =>
-          labelsLower.includes(l.toLowerCase())
-        ).length;
-        return bMatchCount - aMatchCount;
-      });
+      // Step 4: Normalize Shopify product data to carousel format
+      const matches = products.slice(0, MAX_CAROUSEL_RESULTS);
 
-      // Cap results for a usable carousel
-      const matches = sorted.slice(0, MAX_CAROUSEL_RESULTS);
-      const totalFound = sorted.length;
+      const storeTheme = await fetchStoreTheme();
 
       return widget({
         props: {
-          products: matches.map((p) => ({
-            id: String(p.id),
-            name: p.name,
-            description: p.description,
-            labels: p.labels,
-            product_link: p.product_link,
-            image_urls: p.image_links,
-            price: p.price / 100,
+          products: matches.map((p: any) => ({
+            id: String(p.product_id || p.id),
+            name: p.title || p.name || "",
+            description: p.description || "",
+            labels: p.tags ? (Array.isArray(p.tags) ? p.tags : p.tags.split(",").map((t: string) => t.trim())) : [],
+            product_link: p.url || p.product_url || "",
+            image_urls: p.image_url ? [p.image_url] : p.image_urls || p.images || [],
+            price: parseFloat(p.price_range?.min ?? p.price ?? "0"),
           })),
           searchLabels: labels,
+          store_theme: storeTheme,
         },
         output: text(
-          `Found ${totalFound} skincare products for ${labels.join(", ")}${price !== undefined ? ` under $${price}` : ""} (showing top ${matches.length}):\n` +
+          `Found ${products.length} skincare products for ${labels.join(", ")}${price !== undefined ? ` under $${price}` : ""} (showing top ${matches.length}):\n` +
             matches
               .map(
                 (p: any) =>
-                  `- ${p.name} ($${formatPrice(p.price)}) — ${p.labels.join(", ")}`
+                  `- ${p.title || p.name} ($${parseFloat(p.price_range?.min ?? p.price ?? "0").toFixed(2)}) — ${p.tags || ""}`
               )
               .join("\n")
         ),
@@ -177,11 +224,6 @@ server.tool(
 
 // --- product-detail tool ---
 
-const llm = new ChatOpenAI({
-  model: "gpt-5-mini-2025-08-07",
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 server.tool(
   {
     name: "product-detail",
@@ -194,7 +236,7 @@ server.tool(
       "(1) Before calling this tool, gather the user's skin profile from the conversation history and any chatbot memory — " +
       "include skin type, active concerns, treatment goals, ingredient preferences, sensitivities, and budget. " +
       "(2) Pass all of this as a comprehensive user_preferences string so the personalized recommendation is as relevant as possible. " +
-      "(3) The tool fetches the product from the database and uses an LLM to generate a tailored 2-3 paragraph recommendation " +
+      "(3) The tool fetches the product from the store and uses an LLM to generate a tailored 2-3 paragraph recommendation " +
       "explaining why this product suits the user's specific needs.",
     annotations: {
       readOnlyHint: true,
@@ -202,8 +244,8 @@ server.tool(
     },
     schema: z.object({
       product_id: z
-        .number()
-        .describe("The numeric ID of the product to show details for. Obtained from get-products results."),
+        .string()
+        .describe("The Shopify GID of the product to show details for. Obtained from get-products results."),
       user_preferences: z
         .string()
         .describe(
@@ -222,18 +264,38 @@ server.tool(
     },
   },
   async ({ product_id, user_preferences }) => {
-    const { data: product, error: dbError } = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", product_id)
-      .single();
-
-    if (dbError || !product) {
-      return error(`Product not found (ID: ${product_id})`);
-    }
-
-    // Generate personalized description using LLM
     try {
+      // Fetch product details from Shopify MCP
+      const result = await callShopifyMCP("get_product_details", { product_id });
+
+      // Parse product from MCP response
+      let product: any = null;
+      if (result?.content) {
+        for (const block of result.content) {
+          if (block.type === "text" && block.text) {
+            try {
+              product = JSON.parse(block.text);
+            } catch {
+              // text wasn't JSON, skip
+            }
+          }
+        }
+      }
+
+      if (!product) {
+        return error(`Product not found (ID: ${product_id})`);
+      }
+
+      const productName = product.title || product.name || "";
+      const productDescription = product.description || product.body_html || "";
+      const productTags = product.tags
+        ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags)
+        : "";
+      const productPrice = parseFloat(product.price_range?.min ?? product.price ?? "0").toFixed(2);
+      const productImage = product.image_url || product.images?.[0] || "";
+      const productLink = product.url || product.product_url || "";
+
+      // Generate personalized description using LLM
       const response = await llm.invoke([
         {
           role: "system",
@@ -246,34 +308,37 @@ server.tool(
         {
           role: "user",
           content:
-            `Product: ${product.name}\n` +
-            `Description: ${product.description}\n` +
-            `Targets: ${product.labels.join(", ")}\n` +
-            `Price: $${formatPrice(product.price)}\n\n` +
+            `Product: ${productName}\n` +
+            `Description: ${productDescription}\n` +
+            `Tags: ${productTags}\n` +
+            `Price: $${productPrice}\n\n` +
             `User preferences: ${user_preferences}`,
         },
       ]);
 
       const personalizedDescription = String(response.content);
 
+      const storeTheme = await fetchStoreTheme();
+
       return widget({
         props: {
           product_id,
-          product_name: product.name,
+          product_name: productName,
           personalized_description: personalizedDescription,
-          labels: product.labels.join(", "),
-          image_links: product.image_links?.[0] || "",
-          product_link: product.product_link,
-          price: formatPrice(product.price),
+          labels: productTags,
+          image_links: productImage,
+          product_link: productLink,
+          price: productPrice,
+          store_theme: storeTheme,
         },
         output: text(
-          `${product.name} — $${formatPrice(product.price)}\n\n${personalizedDescription}\n\nLabels: ${product.labels.join(", ")}\nBuy: ${product.product_link}`
+          `${productName} — $${productPrice}\n\n${personalizedDescription}\n\nTags: ${productTags}\nBuy: ${productLink}`
         ),
       });
     } catch (err: any) {
-      console.error("LLM error:", err?.message || err);
+      console.error("product-detail error:", err?.message || err);
       return error(
-        `Failed to generate personalized recommendation for ${product.name}: ${err?.message || "Unknown error"}. Please try again.`
+        `Failed to get product details: ${err?.message || "Unknown error"}. Please try again.`
       );
     }
   }
