@@ -51,52 +51,157 @@ export default function ProductDetail() {
   const colors = useColors();
 
   if (isPending) {
+    const shimmerBg = colors.bg === "#1a1412"
+      ? "linear-gradient(90deg, #241e1a 0%, #2e2822 40%, #241e1a 80%)"
+      : "linear-gradient(90deg, #efe5db 0%, #f7efe8 40%, #efe5db 80%)";
+
     return (
       <McpUseProvider autoSize>
-        <style>{`@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}@keyframes dots{0%{content:""}33%{content:"."}66%{content:".."}100%{content:"..."}}`}</style>
+        <style>{`
+          @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+          @keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+          @keyframes shimmerSlide{0%{background-position:-400px 0}100%{background-position:400px 0}}
+        `}</style>
         <div
           style={{
-            padding: "40px 24px",
-            textAlign: "center",
-            color: colors.textSecondary,
-            fontFamily:
-              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             backgroundColor: colors.bg,
             borderRadius: 16,
+            overflow: "hidden",
             border: `1px solid ${colors.border}`,
+            boxShadow: `0 4px 20px ${colors.shadow}`,
           }}
         >
+          {/* Skeleton image */}
           <div
             style={{
-              width: 32,
-              height: 32,
-              border: `3px solid ${colors.border}`,
-              borderTop: `3px solid ${colors.spinner}`,
-              borderRadius: "50%",
-              margin: "0 auto 16px",
-              animation: "spin 1s ease-in-out infinite",
-            }}
-          />
-          <p
-            style={{
-              margin: "0 0 4px 0",
-              fontSize: 14,
-              fontWeight: 500,
-              color: colors.text,
+              width: "100%",
+              height: 280,
+              background: shimmerBg,
+              backgroundSize: "800px 280px",
+              animation: "shimmerSlide 1.8s ease-in-out infinite",
+              position: "relative",
             }}
           >
-            Analyzing this product for your skin
-          </p>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 12,
-              fontStyle: "italic",
-              animation: "pulse 2s ease-in-out infinite",
-            }}
-          >
-            Writing your personalized recommendation...
-          </p>
+            {/* Spinner centered on image area */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 14,
+            }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  border: `3px solid ${colors.border}`,
+                  borderTop: `3px solid ${colors.spinner}`,
+                  borderRadius: "50%",
+                  animation: "spin 1s ease-in-out infinite",
+                }}
+              />
+              <p style={{
+                margin: 0,
+                fontSize: 13,
+                fontWeight: 500,
+                color: colors.textSecondary,
+                animation: "pulse 2s ease-in-out infinite",
+              }}>
+                Analyzing this product for your skin...
+              </p>
+            </div>
+          </div>
+
+          {/* Skeleton content */}
+          <div style={{ padding: "16px 24px 28px" }}>
+            {/* Eyebrow skeleton */}
+            <div style={{
+              width: 120,
+              height: 10,
+              borderRadius: 5,
+              background: shimmerBg,
+              backgroundSize: "800px 10px",
+              animation: "shimmerSlide 1.8s ease-in-out infinite",
+              marginBottom: 10,
+            }} />
+
+            {/* Title + price row skeleton */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{
+                width: "65%",
+                height: 22,
+                borderRadius: 6,
+                background: shimmerBg,
+                backgroundSize: "800px 22px",
+                animation: "shimmerSlide 1.8s ease-in-out infinite",
+              }} />
+              <div style={{
+                width: 60,
+                height: 22,
+                borderRadius: 6,
+                background: shimmerBg,
+                backgroundSize: "800px 22px",
+                animation: "shimmerSlide 1.8s ease-in-out infinite",
+              }} />
+            </div>
+
+            {/* Label skeletons */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+              {[70, 85, 60].map((w, i) => (
+                <div key={i} style={{
+                  width: w,
+                  height: 24,
+                  borderRadius: 20,
+                  background: shimmerBg,
+                  backgroundSize: "800px 24px",
+                  animation: `shimmerSlide 1.8s ease-in-out ${i * 0.1}s infinite`,
+                }} />
+              ))}
+            </div>
+
+            {/* Description skeleton */}
+            <div style={{
+              padding: "18px 20px",
+              backgroundColor: colors.cardInner,
+              borderRadius: 12,
+              marginBottom: 22,
+              borderLeft: `3px solid ${colors.quoteBar}`,
+            }}>
+              <div style={{
+                width: 180,
+                height: 10,
+                borderRadius: 5,
+                background: shimmerBg,
+                backgroundSize: "800px 10px",
+                animation: "shimmerSlide 1.8s ease-in-out infinite",
+                marginBottom: 14,
+              }} />
+              {[100, 90, 70].map((pct, i) => (
+                <div key={i} style={{
+                  width: `${pct}%`,
+                  height: 12,
+                  borderRadius: 6,
+                  background: shimmerBg,
+                  backgroundSize: "800px 12px",
+                  animation: `shimmerSlide 1.8s ease-in-out ${i * 0.15}s infinite`,
+                  marginBottom: i < 2 ? 10 : 0,
+                }} />
+              ))}
+            </div>
+
+            {/* Button skeleton */}
+            <div style={{
+              width: "100%",
+              height: 48,
+              borderRadius: 12,
+              background: shimmerBg,
+              backgroundSize: "800px 48px",
+              animation: "shimmerSlide 1.8s ease-in-out infinite",
+            }} />
+          </div>
         </div>
       </McpUseProvider>
     );

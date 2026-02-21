@@ -182,6 +182,9 @@ const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// In-memory cache for personalized recommendations (resets on server restart)
+const recommendationCache = new Map<string, string>();
+
 server.tool(
   {
     name: "product-detail",
@@ -232,29 +235,35 @@ server.tool(
       return error(`Product not found (ID: ${product_id})`);
     }
 
-    // Generate personalized description using LLM
+    // Generate personalized description using LLM (with cache)
     try {
-      const response = await llm.invoke([
-        {
-          role: "system",
-          content:
-            "You are an expert skincare sales associate. Write a personalized 2-3 paragraph product recommendation. " +
-            "Be warm, knowledgeable, and specific about why this product suits the user's needs. " +
-            "Reference their specific concerns and explain how the product's ingredients or properties address them. " +
-            "Keep it concise and engaging.",
-        },
-        {
-          role: "user",
-          content:
-            `Product: ${product.name}\n` +
-            `Description: ${product.description}\n` +
-            `Targets: ${product.labels.join(", ")}\n` +
-            `Price: $${formatPrice(product.price)}\n\n` +
-            `User preferences: ${user_preferences}`,
-        },
-      ]);
+      const cacheKey = `${product_id}:${user_preferences}`;
+      let personalizedDescription = recommendationCache.get(cacheKey);
 
-      const personalizedDescription = String(response.content);
+      if (!personalizedDescription) {
+        const response = await llm.invoke([
+          {
+            role: "system",
+            content:
+              "You are an expert skincare sales associate. Write a personalized 2-3 paragraph product recommendation. " +
+              "Be warm, knowledgeable, and specific about why this product suits the user's needs. " +
+              "Reference their specific concerns and explain how the product's ingredients or properties address them. " +
+              "Keep it concise and engaging.",
+          },
+          {
+            role: "user",
+            content:
+              `Product: ${product.name}\n` +
+              `Description: ${product.description}\n` +
+              `Targets: ${product.labels.join(", ")}\n` +
+              `Price: $${formatPrice(product.price)}\n\n` +
+              `User preferences: ${user_preferences}`,
+          },
+        ]);
+
+        personalizedDescription = String(response.content);
+        recommendationCache.set(cacheKey, personalizedDescription);
+      }
 
       return widget({
         props: {
@@ -279,4 +288,4 @@ server.tool(
   }
 );
 
-server.listen();
+server.listen({ host: "0.0.0.0", port: Number(process.env.PORT) || 3000 });
