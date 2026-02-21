@@ -7,84 +7,306 @@ import {
 import { z } from "zod";
 
 const propsSchema = z.object({
-  description: z.string(),
+  product_id: z.number(),
+  product_name: z.string(),
+  personalized_description: z.string(),
+  labels: z.string(),
+  image_links: z.string(),
+  product_link: z.string(),
+  price: z.string(),
 });
 
 export const widgetMetadata: WidgetMetadata = {
-  description: "Displays a personalized skincare product description.",
+  description:
+    "Displays full skincare product details with personalized recommendation.",
   props: propsSchema,
   exposeAsTool: false,
 };
 
 type Props = z.infer<typeof propsSchema>;
 
-export default function ProductDetail() {
-  const { props, isPending } = useWidget<Props>();
+function useColors() {
   const theme = useWidgetTheme();
-
-  const colors = {
-    bg: theme === "dark" ? "#1a1a1a" : "#ffffff",
-    text: theme === "dark" ? "#e8e4e0" : "#1c1917",
-    textSecondary: theme === "dark" ? "#a8a29e" : "#78716c",
-    border: theme === "dark" ? "#2a2a2a" : "#e7e5e4",
-    accent: theme === "dark" ? "#c4956a" : "#b45309",
+  return {
+    bg: theme === "dark" ? "#1a1412" : "#fdf8f4",
+    card: theme === "dark" ? "#241e1a" : "#ffffff",
+    cardInner: theme === "dark" ? "#1e1814" : "#faf5ef",
+    text: theme === "dark" ? "#f0e8e0" : "#3d2b1f",
+    textSecondary: theme === "dark" ? "#b8a898" : "#7a6555",
+    border: theme === "dark" ? "#3a2e26" : "#efe5db",
+    accent: theme === "dark" ? "#e8a87c" : "#c2703e",
+    accentBg: theme === "dark" ? "#2e2218" : "#fef0e4",
+    badgeText: theme === "dark" ? "#e8a87c" : "#9a5830",
+    btnPrimary: theme === "dark" ? "#e8a87c" : "#c2703e",
+    btnPrimaryHover: theme === "dark" ? "#f0b88c" : "#a85c30",
+    btnPrimaryText: "#ffffff",
+    spinner: theme === "dark" ? "#e8a87c" : "#c2703e",
+    quoteBar: theme === "dark" ? "#e8a87c" : "#d4885a",
+    shadow: theme === "dark" ? "rgba(0,0,0,0.3)" : "rgba(150,120,90,0.1)",
   };
+}
+
+export default function ProductDetail() {
+  const { props, isPending, openExternal } = useWidget<Props>();
+  const colors = useColors();
 
   if (isPending) {
     return (
       <McpUseProvider autoSize>
-        <style>{`@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}`}</style>
+        <style>{`@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}@keyframes dots{0%{content:""}33%{content:"."}66%{content:".."}100%{content:"..."}}`}</style>
         <div
           style={{
-            padding: 24,
+            padding: "40px 24px",
             textAlign: "center",
             color: colors.textSecondary,
             fontFamily:
               '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            backgroundColor: colors.bg,
+            borderRadius: 16,
+            border: `1px solid ${colors.border}`,
           }}
         >
           <div
             style={{
-              width: 24,
-              height: 24,
-              border: `2px solid ${colors.border}`,
-              borderTop: `2px solid ${colors.accent}`,
+              width: 32,
+              height: 32,
+              border: `3px solid ${colors.border}`,
+              borderTop: `3px solid ${colors.spinner}`,
               borderRadius: "50%",
-              margin: "0 auto 12px",
-              animation: "spin 0.8s linear infinite",
+              margin: "0 auto 16px",
+              animation: "spin 1s ease-in-out infinite",
             }}
           />
-          <p style={{ margin: 0, fontSize: 13 }}>
-            Creating your personalized recommendation...
+          <p
+            style={{
+              margin: "0 0 4px 0",
+              fontSize: 14,
+              fontWeight: 500,
+              color: colors.text,
+            }}
+          >
+            Analyzing this product for your skin
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              fontStyle: "italic",
+              animation: "pulse 2s ease-in-out infinite",
+            }}
+          >
+            Writing your personalized recommendation...
           </p>
         </div>
       </McpUseProvider>
     );
   }
 
+  const labels = props.labels
+    .split(",")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Split description into paragraphs for nicer rendering
+  const paragraphs = props.personalized_description
+    .split("\n\n")
+    .filter((p) => p.trim());
+
   return (
     <McpUseProvider autoSize>
+      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
       <div
         style={{
-          padding: 20,
-          backgroundColor: colors.bg,
-          color: colors.text,
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-          borderRadius: 10,
+          backgroundColor: colors.bg,
+          color: colors.text,
+          borderRadius: 16,
+          overflow: "hidden",
           border: `1px solid ${colors.border}`,
+          boxShadow: `0 4px 20px ${colors.shadow}`,
+          animation: "fadeIn 0.4s ease-out",
         }}
       >
-        <p
-          style={{
-            margin: 0,
-            fontSize: 14,
-            lineHeight: 1.7,
-            whiteSpace: "pre-line",
-          }}
-        >
-          {props.description}
-        </p>
+        {/* Product image */}
+        {props.image_links && (
+          <div
+            style={{
+              width: "100%",
+              height: 280,
+              overflow: "hidden",
+              backgroundColor: colors.border,
+              position: "relative",
+            }}
+          >
+            <img
+              src={props.image_links}
+              alt={props.product_name}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+            {/* Gradient overlay at bottom of image */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 60,
+                background: `linear-gradient(transparent, ${colors.bg})`,
+              }}
+            />
+          </div>
+        )}
+
+        {/* Content */}
+        <div style={{ padding: "16px 24px 28px" }}>
+          {/* Eyebrow */}
+          <p
+            style={{
+              margin: "0 0 6px 0",
+              fontSize: 11,
+              fontWeight: 500,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: colors.accent,
+            }}
+          >
+            Personalized for you
+          </p>
+
+          {/* Name and price */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 14,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 24,
+                fontWeight: 700,
+                lineHeight: 1.2,
+                flex: 1,
+                letterSpacing: "-0.02em",
+                fontFamily: '"Georgia", "Times New Roman", serif',
+              }}
+            >
+              {props.product_name}
+            </h2>
+            <span
+              style={{
+                fontSize: 24,
+                fontWeight: 700,
+                color: colors.accent,
+                marginLeft: 16,
+                whiteSpace: "nowrap",
+              }}
+            >
+              ${props.price}
+            </span>
+          </div>
+
+          {/* Labels */}
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+              marginBottom: 20,
+            }}
+          >
+            {labels.map((label) => (
+              <span
+                key={label}
+                style={{
+                  fontSize: 11,
+                  padding: "4px 12px",
+                  borderRadius: 20,
+                  backgroundColor: colors.accentBg,
+                  color: colors.badgeText,
+                  fontWeight: 500,
+                }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+
+          {/* Personalized description */}
+          <div
+            style={{
+              padding: "18px 20px",
+              backgroundColor: colors.cardInner,
+              borderRadius: 12,
+              marginBottom: 22,
+              borderLeft: `3px solid ${colors.quoteBar}`,
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 8px 0",
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: colors.accent,
+              }}
+            >
+              Why we recommend this for you
+            </p>
+            {paragraphs.map((paragraph, i) => (
+              <p
+                key={i}
+                style={{
+                  margin: i === paragraphs.length - 1 ? 0 : "0 0 12px 0",
+                  fontSize: 14,
+                  lineHeight: 1.75,
+                  color: colors.text,
+                }}
+              >
+                {paragraph.trim()}
+              </p>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <button
+            onClick={() => openExternal(props.product_link)}
+            style={{
+              display: "block",
+              width: "100%",
+              textAlign: "center",
+              padding: "14px 24px",
+              backgroundColor: colors.btnPrimary,
+              color: colors.btnPrimaryText,
+              borderRadius: 12,
+              border: "none",
+              fontSize: 15,
+              fontWeight: 600,
+              letterSpacing: "0.01em",
+              cursor: "pointer",
+              transition: "background-color 0.2s, transform 0.1s",
+              boxShadow: `0 2px 8px ${colors.shadow}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = colors.btnPrimaryHover;
+              e.currentTarget.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = colors.btnPrimary;
+              e.currentTarget.style.transform = "translateY(0)";
+            }}
+          >
+            Shop Now — ${props.price}
+          </button>
+        </div>
       </div>
     </McpUseProvider>
   );
