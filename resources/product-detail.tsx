@@ -14,6 +14,13 @@ const propsSchema = z.object({
   image_links: z.string(),
   product_link: z.string(),
   price: z.string(),
+  similar_products: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    image_url: z.string(),
+    price: z.string(),
+    labels: z.array(z.string()),
+  })).optional(),
 });
 
 export const widgetMetadata: WidgetMetadata = {
@@ -47,7 +54,7 @@ function useColors() {
 }
 
 export default function ProductDetail() {
-  const { props, isPending, openExternal } = useWidget<Props>();
+  const { props, isPending, openExternal, sendFollowUpMessage } = useWidget<Props>();
   const colors = useColors();
 
   if (isPending) {
@@ -411,6 +418,112 @@ export default function ProductDetail() {
           >
             Shop Now — ${props.price}
           </button>
+
+          {/* You Might Also Like */}
+          {props.similar_products && props.similar_products.length > 0 && (
+            <div style={{ animation: "fadeIn 0.5s ease-out 0.2s both" }}>
+              <div
+                style={{
+                  height: 1,
+                  backgroundColor: colors.border,
+                  margin: "24px 0",
+                }}
+              />
+              <h3
+                style={{
+                  margin: "0 0 16px 0",
+                  fontSize: 18,
+                  fontWeight: 600,
+                  fontFamily: '"Georgia", "Times New Roman", serif',
+                  color: colors.text,
+                }}
+              >
+                You Might Also Like
+              </h3>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  overflowX: "auto",
+                }}
+              >
+                {props.similar_products.map((product) => (
+                  <div
+                    key={product.id}
+                    onClick={() =>
+                      sendFollowUpMessage(
+                        `Show me the full details for "${product.name}" (product ID: ${product.id}). Write a personalized recommendation based on my skin concerns.`
+                      )
+                    }
+                    style={{
+                      flex: "0 0 120px",
+                      cursor: "pointer",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                      backgroundColor: colors.card,
+                      border: `1px solid ${colors.border}`,
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.boxShadow = `0 4px 12px ${colors.shadow}`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 120,
+                        height: 120,
+                        overflow: "hidden",
+                        backgroundColor: colors.border,
+                      }}
+                    >
+                      {product.image_url && (
+                        <img
+                          src={product.image_url}
+                          alt={product.name}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div style={{ padding: "8px 10px" }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: colors.text,
+                          lineHeight: 1.3,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {product.name}
+                      </p>
+                      <p
+                        style={{
+                          margin: "4px 0 0 0",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: colors.accent,
+                        }}
+                      >
+                        ${product.price}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </McpUseProvider>

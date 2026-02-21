@@ -59,7 +59,8 @@ server.tool(
       "(2) If the user describes concerns in text, extract the relevant skin condition labels from their message. " +
       "(3) If the user's concern is vague or no skin condition can be determined, ask clarifying follow-up questions — do NOT guess or assume conditions. " +
       "(4) You may combine multiple labels to find products that target several concerns at once. " +
-      "Results are ranked by relevance (most matching labels first).",
+      "Results are ranked by relevance (most matching labels first). " +
+      "IMPORTANT: After calling this tool, do NOT list out the products in text. The widget carousel already displays them visually. Just let the widget speak for itself — only add a brief 1-sentence summary if needed.",
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
@@ -156,15 +157,7 @@ server.tool(
           })),
           searchLabels: labels,
         },
-        output: text(
-          `Found ${totalFound} skincare products for ${labels.join(", ")}${price !== undefined ? ` under $${price}` : ""} (showing top ${matches.length}):\n` +
-            matches
-              .map(
-                (p: any) =>
-                  `- ${p.name} ($${formatPrice(p.price)}) — ${p.labels.join(", ")}`
-              )
-              .join("\n")
-        ),
+        output: text(""),
       });
     } catch (err: any) {
       console.error("get-products error:", err?.message || err);
@@ -235,6 +228,27 @@ server.tool(
       return error(`Product not found (ID: ${product_id})`);
     }
 
+    // Fetch similar products based on overlapping labels
+    const { data: allProducts } = await supabase
+      .from("products")
+      .select("*");
+
+    const currentLabels = (product.labels || []).map((l: string) =>
+      l.toLowerCase()
+    );
+
+    const similarProducts = (allProducts || [])
+      .filter((p: any) => p.id !== product_id)
+      .map((p: any) => {
+        const overlap = (p.labels || []).filter((l: string) =>
+          currentLabels.includes(l.toLowerCase())
+        ).length;
+        return { ...p, overlap };
+      })
+      .filter((p: any) => p.overlap > 0)
+      .sort((a: any, b: any) => b.overlap - a.overlap)
+      .slice(0, 4);
+
     // Generate personalized description using LLM (with cache)
     try {
       const cacheKey = `${product_id}:${user_preferences}`;
@@ -274,6 +288,13 @@ server.tool(
           image_links: product.image_links?.[0] || "",
           product_link: product.product_link,
           price: formatPrice(product.price),
+          similar_products: similarProducts.map((p: any) => ({
+            id: String(p.id),
+            name: p.name,
+            image_url: p.image_links?.[0] || "",
+            price: formatPrice(p.price),
+            labels: p.labels,
+          })),
         },
         output: text(
           `${product.name} — $${formatPrice(product.price)}\n\n${personalizedDescription}\n\nLabels: ${product.labels.join(", ")}\nBuy: ${product.product_link}`
