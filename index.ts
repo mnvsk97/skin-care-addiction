@@ -301,29 +301,9 @@ server.tool(
       "Search skincare products by skin condition labels and max price. Use this tool when the user asks for a skincare product recommendation. Extract data from the user's skin picture (if provided) and their question, then turn it into a search query. If the user doesn't provide skin condition or if you cannot extract the skin condition from photos, ask follow-up questions instead of making assumptions.",
     schema: z.object({
       labels: z
-        .array(
-          z.enum([
-            "Whiteheads",
-            "Blackheads",
-            "Cystic acne",
-            "Hormonal breakouts",
-            "Acne scarring",
-            "Textured skin",
-            "Large pores",
-            "Hyperpigmentation",
-            "Post-inflammatory hyperpigmentation",
-            "Melasma",
-            "Uneven skin tone",
-            "Wrinkles",
-            "Fine lines",
-            "Oily skin",
-            "Dry skin",
-            "Combination skin",
-            "Normal skin",
-          ])
-        )
+        .array(z.string())
         .describe(
-          "Skin condition labels to filter products by. Must match one or more of the supported conditions."
+          "Skin condition labels to filter products by. Supported values: Whiteheads, Blackheads, Cystic acne, Hormonal breakouts, Acne scarring, Textured skin, Large pores, Hyperpigmentation, Post-inflammatory hyperpigmentation, Melasma, Uneven skin tone, Wrinkles, Fine lines, Oily skin, Dry skin, Combination skin, Normal skin."
         ),
       price: z
         .number()
@@ -341,7 +321,7 @@ server.tool(
     const matches = PRODUCTS.filter(
       (product) =>
         product.price <= price &&
-        product.labels.some((label) => labels.includes(label as any))
+        product.labels.some((label) => labels.includes(label))
     ).sort((a, b) => {
       const aMatchCount = a.labels.filter((l) =>
         labels.includes(l as any)
@@ -401,20 +381,9 @@ server.tool(
       invoked: "Recommendation ready",
     },
   },
-  async ({ product_description }, ctx) => {
-    // Use LLM sampling if the client supports it to generate a truly personalized description
-    if (ctx.client.can("sampling")) {
-      const personalized = await ctx.sample(
-        `You are the world's best skincare sales associate. A customer is looking at a product. Based on the following product description, generate an enthusiastic, knowledgeable, and personalized recommendation. Highlight key active ingredients, who it's best for, how to use it in a routine, and any tips.\n\nProduct: ${product_description}\n\nWrite a warm, personalized recommendation (2-3 paragraphs):`
-      );
-      return widget({
-        props: { description: personalized },
-        output: text(personalized),
-      });
-    }
-
+  async ({ product_description }) => {
     // Fallback: return the original description with a formatted wrapper
-    const personalized = `✨ Personalized Recommendation ✨\n\n${product_description}\n\n💡 Pro tip: Introduce this product gradually into your routine — start with 2-3 times per week and increase as your skin adjusts. Always pair with a broad-spectrum SPF during the day!`;
+    const personalized = `Personalized Recommendation\n\n${product_description}\n\nPro tip: Introduce this product gradually into your routine — start with 2-3 times per week and increase as your skin adjusts. Always pair with a broad-spectrum SPF during the day!`;
 
     return widget({
       props: { description: personalized },
