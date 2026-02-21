@@ -19,9 +19,15 @@ const productSchema = z.object({
   price: z.number(),
 });
 
+const storeThemeSchema = z.object({
+  accent_color: z.string(),
+  store_name: z.string(),
+}).optional();
+
 const propsSchema = z.object({
   products: z.array(productSchema),
   searchLabels: z.array(z.string()),
+  store_theme: storeThemeSchema,
 });
 
 export const widgetMetadata: WidgetMetadata = {
@@ -36,27 +42,29 @@ type Product = z.infer<typeof productSchema>;
 
 // --- Theme hook ---
 
-function useColors() {
+function useColors(accentColor?: string) {
   const theme = useWidgetTheme();
+  const accent = accentColor || (theme === "dark" ? "#e8a87c" : "#c2703e");
+
   return {
-    bg: theme === "dark" ? "#1a1412" : "#fdf8f4",
-    card: theme === "dark" ? "#241e1a" : "#ffffff",
-    text: theme === "dark" ? "#f0e8e0" : "#3d2b1f",
-    textSecondary: theme === "dark" ? "#b8a898" : "#7a6555",
-    textMuted: theme === "dark" ? "#8a7a6a" : "#a89888",
-    border: theme === "dark" ? "#3a2e26" : "#efe5db",
-    accent: theme === "dark" ? "#e8a87c" : "#c2703e",
-    accentSoft: theme === "dark" ? "#d4956a" : "#d4885a",
-    accentBg: theme === "dark" ? "#2e2218" : "#fef0e4",
-    accentLight: theme === "dark" ? "#e8a87c" : "#c2703e",
-    badge: theme === "dark" ? "#2a2220" : "#f7efe8",
-    badgeText: theme === "dark" ? "#e8a87c" : "#9a5830",
-    spinner: theme === "dark" ? "#e8a87c" : "#c2703e",
-    shadow: theme === "dark" ? "rgba(0,0,0,0.3)" : "rgba(150,120,90,0.08)",
+    bg: theme === "dark" ? "#141618" : "#f8f9fa",
+    card: theme === "dark" ? "#1e2024" : "#ffffff",
+    text: theme === "dark" ? "#e8eaed" : "#2d3136",
+    textSecondary: theme === "dark" ? "#9aa0a8" : "#6b7280",
+    textMuted: theme === "dark" ? "#6b7280" : "#9ca3af",
+    border: theme === "dark" ? "#2a2e34" : "#e5e7eb",
+    accent,
+    accentSoft: theme === "dark" ? `${accent}cc` : `${accent}dd`,
+    accentBg: theme === "dark" ? `${accent}1a` : `${accent}15`,
+    accentLight: accent,
+    badge: theme === "dark" ? "#2a2e34" : "#f3f4f6",
+    badgeText: theme === "dark" ? accent : accent,
+    spinner: accent,
+    shadow: theme === "dark" ? "rgba(0,0,0,0.3)" : "rgba(0,0,0,0.06)",
     cardHoverShadow:
       theme === "dark"
         ? "0 8px 28px rgba(0,0,0,0.35)"
-        : "0 8px 28px rgba(150,120,90,0.15)",
+        : "0 8px 28px rgba(0,0,0,0.1)",
   };
 }
 
@@ -64,7 +72,7 @@ function useColors() {
 
 export default function ProductCarousel() {
   const { props, isPending, sendFollowUpMessage } = useWidget<Props>();
-  const colors = useColors();
+  const colors = useColors(props?.store_theme?.accent_color);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [clickedId, setClickedId] = useState<string | null>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -78,7 +86,7 @@ export default function ProductCarousel() {
             textAlign: "center",
             color: colors.textSecondary,
             fontFamily:
-              '"Georgia", "Times New Roman", serif',
+              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           }}
         >
           <style>{`@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}`}</style>
@@ -133,7 +141,8 @@ export default function ProductCarousel() {
     setScrollOffset(newOffset);
   };
 
-  const { products, searchLabels } = props;
+  const { products, searchLabels, store_theme } = props;
+  const storeName = store_theme?.store_name;
 
   return (
     <McpUseProvider autoSize>
@@ -154,6 +163,24 @@ export default function ProductCarousel() {
 
         {/* Header */}
         <div style={{ padding: "0 20px", marginBottom: 18 }}>
+          {storeName && (
+            <span
+              style={{
+                display: "inline-block",
+                padding: "3px 10px",
+                fontSize: 10,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                borderRadius: 4,
+                backgroundColor: colors.accentBg,
+                color: colors.accent,
+                marginBottom: 10,
+              }}
+            >
+              {storeName}
+            </span>
+          )}
           <p
             style={{
               margin: "0 0 4px 0",
