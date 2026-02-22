@@ -17,6 +17,67 @@ Skin Care Addiction is an MCP app that connects to your AI assistant, searches a
    - **Recommended Routine** — A concise AM/PM skincare routine incorporating the product.
 4. **Buy on Amazon** — Click "Shop Now" to go straight to the product on Amazon.
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  AI Assistant (ChatGPT / Claude)                        │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │ User: "I have oily skin and play sports a lot,    │  │
+│  │        what products should I use?"               │  │
+│  └───────────────────┬───────────────────────────────┘  │
+└──────────────────────┼──────────────────────────────────┘
+                       │
+                       ▼  MCP tool call
+┌──────────────────────────────────────────────────────────┐
+│  MCP Server (mcp-use)                                    │
+│                                                          │
+│  ┌──────────────────┐      ┌──────────────────────────┐  │
+│  │  get-products     │      │  product-detail          │  │
+│  │                   │      │                          │  │
+│  │  labels + price   │      │  product_id +            │  │
+│  │       │           │      │  user_preferences        │  │
+│  │       ▼           │      │       │          │       │  │
+│  │   Supabase ───┐   │      │   Supabase   GPT-4o-mini│  │
+│  │   (filter &   │   │      │   (fetch)    (personalize│  │
+│  │    rank)      │   │      │       │       routine)   │  │
+│  │       │       │   │      │       ▼          │       │  │
+│  │       ▼       │   │      │   ┌──────────────▼──┐    │  │
+│  │  Carousel     │   │      │   │ Detail Widget   │    │  │
+│  │  Widget       │   │      │   │ + Personalized  │    │  │
+│  │               │   │      │   │   Description   │    │  │
+│  │               │   │      │   │ + Routine       │    │  │
+│  │               │   │      │   │ + Similar Items │    │  │
+│  └───────────────┘   │      │   └─────────────────┘    │  │
+│                      │      └──────────────────────────┘  │
+└──────────────────────┼───────────────────────────────────┘
+                       │
+                       ▼  Widget rendered in chat
+┌──────────────────────────────────────────────────────────┐
+│  Chat UI                                                 │
+│  ┌────────┐ ┌────────┐ ┌────────┐                        │
+│  │Product │ │Product │ │Product │  ◀── Carousel          │
+│  │   1    │ │   2    │ │   3    │                        │
+│  └───┬────┘ └────────┘ └────────┘                        │
+│      │ click                                             │
+│      ▼                                                   │
+│  ┌──────────────────────────────┐                        │
+│  │ Personalized Recommendation  │                        │
+│  │ Recommended Routine          │                        │
+│  │ Similar Products             │                        │
+│  │         [Shop on Amazon]     │                        │
+│  └──────────────────────────────┘                        │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Query Flow
+
+1. **User asks** → AI assistant extracts skin condition labels + user preferences from the conversation
+2. **`get-products`** → Queries Supabase, filters by labels & price, ranks by relevance → returns carousel widget
+3. **User clicks a product** → Carousel calls `product-detail` via `callTool` with user preferences
+4. **`product-detail`** → Fetches product from Supabase + calls GPT-4o-mini for personalized description & routine → returns detail widget
+5. **User clicks "Shop Now"** → Opens the product on Amazon
+
 ## Tech Stack
 
 - **MCP Server** — Built with [mcp-use](https://www.npmjs.com/package/mcp-use), exposes two tools (`get-products`, `product-detail`) and two widget resources (product carousel, product detail)
