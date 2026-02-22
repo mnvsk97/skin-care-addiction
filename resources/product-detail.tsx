@@ -375,7 +375,7 @@ export default function ProductDetail() {
                 color: colors.accent,
               }}
             >
-              Why we recommend this for you
+              Personalized Recommendation
             </p>
             {paragraphs.map((paragraph, i) => (
               <p

@@ -82,6 +82,14 @@ server.tool(
         .describe(
           "Optional maximum price in USD. Only products priced at or below this value are returned. Example: 30"
         ),
+      user_preferences: z
+        .string()
+        .optional()
+        .describe(
+          "Summary of the user's skincare profile from conversation context. " +
+          "Include: skin type, concerns, goals, lifestyle, sensitivities, budget. " +
+          "Example: 'Oily skin, hormonal acne on chin, wants to fade dark spots, prefers fragrance-free, budget $30'"
+        ),
     }),
     widget: {
       name: "product-carousel",
@@ -89,7 +97,7 @@ server.tool(
       invoked: "Products found",
     },
   },
-  async ({ labels, price }) => {
+  async ({ labels, price, user_preferences }) => {
     // Validate labels against known values
     const validLabelsLower = SKIN_LABELS.map((l) => l.toLowerCase());
     const labelsLower = labels.map((l) => l.toLowerCase());
@@ -142,7 +150,6 @@ server.tool(
 
       // Cap results for a usable carousel
       const matches = sorted.slice(0, MAX_CAROUSEL_RESULTS);
-      const totalFound = sorted.length;
 
       return widget({
         props: {
@@ -156,6 +163,7 @@ server.tool(
             price: p.price / 100,
           })),
           searchLabels: labels,
+          userPreferences: user_preferences || "",
         },
         output: text(""),
       });
@@ -171,7 +179,7 @@ server.tool(
 // --- product-detail tool ---
 
 const llm = new ChatOpenAI({
-  model: "gpt-5-mini-2025-08-07",
+  model: "gpt-4o-mini",
   apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -268,16 +276,17 @@ server.tool(
           {
             role: "system",
             content:
-              "You are an expert skincare sales associate. Provide a personalized product recommendation with two parts:\n" +
-              "1. personalized_description: 2-3 SHORT sentences explaining why this product suits the user's skin concerns. Mention 1-2 key ingredients. Be warm but very concise.\n" +
+              "You are an expert skincare sales associate. The user has shared their skin type, concerns, or lifestyle — use that context to make the recommendation feel personal.\n\n" +
+              "Provide two parts:\n" +
+              "1. personalized_description: 2-3 SHORT sentences addressing the user directly ('your oily skin', 'your breakouts'). Explain why THIS product helps THEIR specific concerns. Mention 1-2 key ingredients. Be warm, personal, concise.\n" +
               "2. recommended_routine: A brief AM/PM routine in 3-4 bullet points max. Just list the steps (e.g. 'AM: Cleanse → Moisturize → SPF'). Keep it under 50 words.\n\n" +
-              "IMPORTANT: Keep both fields SHORT and scannable. No long paragraphs.",
+              "IMPORTANT: Keep both fields SHORT and scannable. No long paragraphs. Speak directly to the user.",
           },
           {
             role: "user",
             content:
               `Product: ${product.name}\n` +
-              `Description: ${product.description}\n` +
+              `Description: ${product.description.slice(0, 200)}\n` +
               `Targets: ${product.labels.join(", ")}\n` +
               `Price: $${formatPrice(product.price)}\n\n` +
               `User preferences: ${user_preferences}`,

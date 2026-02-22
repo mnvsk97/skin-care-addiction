@@ -22,6 +22,7 @@ const productSchema = z.object({
 const propsSchema = z.object({
   products: z.array(productSchema),
   searchLabels: z.array(z.string()),
+  userPreferences: z.string().optional(),
 });
 
 export const widgetMetadata: WidgetMetadata = {
@@ -414,7 +415,7 @@ function ProductDetailView({
                 color: colors.accent,
               }}
             >
-              Why we recommend this for you
+              Personalized Recommendation
             </p>
             {paragraphs.map((paragraph, i) => (
               <p
@@ -638,7 +639,7 @@ export default function ProductCarousel() {
   >([]);
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  const { products, searchLabels } = props ?? { products: [], searchLabels: [] };
+  const { products, searchLabels, userPreferences } = props ?? { products: [], searchLabels: [], userPreferences: "" };
 
   // Fetch personalized recommendation when a product is selected
   useEffect(() => {
@@ -650,7 +651,7 @@ export default function ProductCarousel() {
     setRecommendedRoutine(null);
     setSimilarProducts([]);
 
-    const userPrefs = `User is searching for products targeting: ${searchLabels.join(", ")}. Show why this product is a great match for these specific skin concerns.`;
+    const userPrefs = userPreferences || `User is searching for products targeting: ${searchLabels.join(", ")}.`;
 
     callTool("product-detail", {
       product_id: Number(selectedProduct.id),
