@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   McpUseProvider,
   useWidget,
@@ -41,6 +41,7 @@ function useColors() {
   return {
     bg: theme === "dark" ? "#1a1412" : "#fdf8f4",
     card: theme === "dark" ? "#241e1a" : "#ffffff",
+    cardInner: theme === "dark" ? "#1e1814" : "#faf5ef",
     text: theme === "dark" ? "#f0e8e0" : "#3d2b1f",
     textSecondary: theme === "dark" ? "#b8a898" : "#7a6555",
     textMuted: theme === "dark" ? "#8a7a6a" : "#a89888",
@@ -57,8 +58,8 @@ function useColors() {
       theme === "dark"
         ? "0 8px 28px rgba(0,0,0,0.35)"
         : "0 8px 28px rgba(150,120,90,0.15)",
-    overlayBg: theme === "dark" ? "rgba(26,20,18,0.96)" : "rgba(253,248,244,0.97)",
     divider: theme === "dark" ? "#3a2e26" : "#efe5db",
+    quoteBar: theme === "dark" ? "#e8a87c" : "#d4885a",
   };
 }
 
@@ -111,95 +112,182 @@ function MatchBadge({
   );
 }
 
-// --- Full-Screen Detail Overlay ---
+// --- Recommendation Skeleton ---
 
-function ProductDetailOverlay({
-  product,
-  searchLabels,
-  colors,
-  onClose,
-  onShopNow,
-}: {
-  product: Product;
-  searchLabels: string[];
-  colors: ReturnType<typeof useColors>;
-  onClose: () => void;
-  onShopNow: (url: string) => void;
-}) {
-  const normalizedSearch = searchLabels.map((l) => l.toLowerCase());
-  const matchScore = getMatchScore(product.labels, searchLabels);
+function RecommendationSkeleton({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const shimmerBg =
+    colors.bg === "#1a1412"
+      ? "linear-gradient(90deg, #241e1a 0%, #2e2822 40%, #241e1a 80%)"
+      : "linear-gradient(90deg, #efe5db 0%, #f7efe8 40%, #efe5db 80%)";
 
   return (
     <div
       style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 10,
-        backgroundColor: colors.overlayBg,
-        overflowY: "auto",
-        animation: "overlayFadeIn 0.22s ease-out both",
-        display: "flex",
-        flexDirection: "column",
+        padding: "18px 20px",
+        backgroundColor: colors.cardInner,
+        borderRadius: 12,
+        borderLeft: `3px solid ${colors.quoteBar}`,
       }}
     >
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        aria-label="Close detail view"
+      <div
         style={{
-          position: "sticky",
-          top: 12,
-          alignSelf: "flex-start",
-          marginLeft: 12,
-          zIndex: 11,
-          width: 34,
-          height: 34,
-          borderRadius: "50%",
-          border: `1px solid ${colors.border}`,
-          backgroundColor: colors.card,
-          color: colors.text,
-          cursor: "pointer",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          fontSize: 18,
-          lineHeight: 1,
-          boxShadow: `0 2px 10px ${colors.shadow}`,
-          flexShrink: 0,
+          gap: 10,
+          marginBottom: 14,
         }}
       >
-        &#8592;
-      </button>
+        <div
+          style={{
+            width: 18,
+            height: 18,
+            border: `2px solid ${colors.border}`,
+            borderTop: `2px solid ${colors.spinner}`,
+            borderRadius: "50%",
+            animation: "spin 1s ease-in-out infinite",
+          }}
+        />
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: colors.accent,
+            animation: "pulse 2s ease-in-out infinite",
+          }}
+        >
+          Analyzing for your skin...
+        </span>
+      </div>
+      {[100, 90, 75].map((pct, i) => (
+        <div
+          key={i}
+          style={{
+            width: `${pct}%`,
+            height: 12,
+            borderRadius: 6,
+            background: shimmerBg,
+            backgroundSize: "800px 12px",
+            animation: `shimmerSlide 1.8s ease-in-out ${i * 0.15}s infinite`,
+            marginBottom: i < 2 ? 10 : 0,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// --- Full-Screen Detail View ---
+
+function ProductDetailView({
+  product,
+  searchLabels,
+  colors,
+  recommendation,
+  isLoadingRec,
+  similarProducts,
+  onClose,
+  onShopNow,
+  onProductClick,
+}: {
+  product: Product;
+  searchLabels: string[];
+  colors: ReturnType<typeof useColors>;
+  recommendation: string | null;
+  isLoadingRec: boolean;
+  similarProducts: Array<{ id: string; name: string; image_url: string; price: string; labels: string[] }>;
+  onClose: () => void;
+  onShopNow: (url: string) => void;
+  onProductClick: (id: string, name: string) => void;
+}) {
+  const normalizedSearch = searchLabels.map((l) => l.toLowerCase());
+  const matchScore = getMatchScore(product.labels, searchLabels);
+  const paragraphs = recommendation
+    ? recommendation.split("\n\n").filter((p) => p.trim())
+    : [];
+
+  return (
+    <div
+      style={{
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        backgroundColor: colors.bg,
+        color: colors.text,
+        animation: "overlayFadeIn 0.22s ease-out both",
+      }}
+    >
+      {/* Back button */}
+      <div style={{ padding: "16px 20px 0" }}>
+        <button
+          onClick={onClose}
+          aria-label="Back to results"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 14px",
+            borderRadius: 20,
+            border: `1px solid ${colors.border}`,
+            backgroundColor: colors.card,
+            color: colors.textSecondary,
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 500,
+            boxShadow: `0 2px 8px ${colors.shadow}`,
+            transition: "background-color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = colors.badge;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = colors.card;
+          }}
+        >
+          &#8592; Back to results
+        </button>
+      </div>
+
+      {/* Hero image */}
+      <div
+        style={{
+          margin: "16px 20px 0",
+          borderRadius: 14,
+          overflow: "hidden",
+          backgroundColor: colors.border,
+        }}
+      >
+        <img
+          src={product.image_urls[0]}
+          alt={product.name}
+          style={{
+            width: "100%",
+            aspectRatio: "4/3",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      </div>
 
       {/* Content */}
       <div
         style={{
+          padding: "20px 20px 28px",
           animation: "overlaySlideUp 0.28s ease-out both",
-          padding: "0 20px 28px",
         }}
       >
-        {/* Hero image */}
-        <div
+        {/* Eyebrow */}
+        <p
           style={{
-            width: "100%",
-            borderRadius: 14,
-            overflow: "hidden",
-            marginBottom: 20,
-            backgroundColor: colors.border,
-            aspectRatio: "4/3",
+            margin: "0 0 6px 0",
+            fontSize: 11,
+            fontWeight: 500,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: colors.accent,
           }}
         >
-          <img
-            src={product.image_urls[0]}
-            alt={product.name}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-        </div>
+          Personalized for you
+        </p>
 
         {/* Name + price row */}
         <div
@@ -214,7 +302,7 @@ function ProductDetailOverlay({
           <h2
             style={{
               margin: 0,
-              fontSize: 20,
+              fontSize: 22,
               fontWeight: 700,
               lineHeight: 1.25,
               fontFamily: '"Georgia", "Times New Roman", serif',
@@ -226,7 +314,7 @@ function ProductDetailOverlay({
           </h2>
           <span
             style={{
-              fontSize: 22,
+              fontSize: 24,
               fontWeight: 700,
               color: colors.accent,
               whiteSpace: "nowrap",
@@ -239,7 +327,7 @@ function ProductDetailOverlay({
 
         {/* Match score pill */}
         {searchLabels.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 16 }}>
             <span
               style={{
                 display: "inline-flex",
@@ -254,53 +342,21 @@ function ProductDetailOverlay({
               }}
             >
               <span style={{ fontSize: 13 }}>
-                {"★".repeat(matchScore)}{"☆".repeat(Math.max(0, searchLabels.length - matchScore))}
+                {"★".repeat(matchScore)}
+                {"☆".repeat(Math.max(0, searchLabels.length - matchScore))}
               </span>
-              {matchScore}/{searchLabels.length} match with your search
+              {matchScore}/{searchLabels.length} match
             </span>
           </div>
         )}
 
-        {/* Description */}
-        <p
-          style={{
-            margin: "0 0 18px",
-            fontSize: 14,
-            lineHeight: 1.65,
-            color: colors.textSecondary,
-          }}
-        >
-          {product.description}
-        </p>
-
-        {/* Divider */}
-        <div
-          style={{
-            height: 1,
-            backgroundColor: colors.divider,
-            marginBottom: 16,
-          }}
-        />
-
         {/* All labels */}
-        <p
-          style={{
-            margin: "0 0 8px",
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: colors.textMuted,
-          }}
-        >
-          Key Benefits
-        </p>
         <div
           style={{
             display: "flex",
             gap: 6,
             flexWrap: "wrap",
-            marginBottom: 24,
+            marginBottom: 20,
           }}
         >
           {product.labels.map((label) => {
@@ -315,7 +371,9 @@ function ProductDetailOverlay({
                   backgroundColor: isMatch ? colors.accentBg : colors.badge,
                   color: isMatch ? colors.badgeText : colors.textMuted,
                   fontWeight: isMatch ? 600 : 400,
-                  border: isMatch ? `1px solid ${colors.accent}30` : "1px solid transparent",
+                  border: isMatch
+                    ? `1px solid ${colors.accent}30`
+                    : "1px solid transparent",
                 }}
               >
                 {isMatch && <span style={{ marginRight: 3 }}>✓</span>}
@@ -324,6 +382,62 @@ function ProductDetailOverlay({
             );
           })}
         </div>
+
+        {/* Personalized recommendation or skeleton */}
+        {isLoadingRec ? (
+          <div style={{ marginBottom: 22 }}>
+            <RecommendationSkeleton colors={colors} />
+          </div>
+        ) : recommendation ? (
+          <div
+            style={{
+              padding: "18px 20px",
+              backgroundColor: colors.cardInner,
+              borderRadius: 12,
+              marginBottom: 22,
+              borderLeft: `3px solid ${colors.quoteBar}`,
+              animation: "overlayFadeIn 0.4s ease-out",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 8px 0",
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: colors.accent,
+              }}
+            >
+              Why we recommend this for you
+            </p>
+            {paragraphs.map((paragraph, i) => (
+              <p
+                key={i}
+                style={{
+                  margin: i === paragraphs.length - 1 ? 0 : "0 0 12px 0",
+                  fontSize: 14,
+                  lineHeight: 1.75,
+                  color: colors.text,
+                }}
+              >
+                {paragraph.trim()}
+              </p>
+            ))}
+          </div>
+        ) : (
+          /* Fallback: show product description if recommendation failed */
+          <p
+            style={{
+              margin: "0 0 20px",
+              fontSize: 14,
+              lineHeight: 1.7,
+              color: colors.textSecondary,
+            }}
+          >
+            {product.description}
+          </p>
+        )}
 
         {/* Shop Now CTA */}
         <button
@@ -352,8 +466,107 @@ function ProductDetailOverlay({
             e.currentTarget.style.transform = "translateY(0)";
           }}
         >
-          Shop Now &rarr;
+          Shop Now &mdash; ${product.price}
         </button>
+
+        {/* You Might Also Like */}
+        {similarProducts.length > 0 && (
+          <div style={{ animation: "overlayFadeIn 0.5s ease-out 0.3s both" }}>
+            <div
+              style={{
+                height: 1,
+                backgroundColor: colors.divider,
+                margin: "24px 0",
+              }}
+            />
+            <h3
+              style={{
+                margin: "0 0 14px 0",
+                fontSize: 16,
+                fontWeight: 600,
+                fontFamily: '"Georgia", "Times New Roman", serif',
+                color: colors.text,
+              }}
+            >
+              You Might Also Like
+            </h3>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                overflowX: "auto",
+                scrollbarWidth: "none",
+              }}
+            >
+              {similarProducts.map((sp) => (
+                <div
+                  key={sp.id}
+                  onClick={() => onProductClick(sp.id, sp.name)}
+                  style={{
+                    flex: "0 0 120px",
+                    cursor: "pointer",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    backgroundColor: colors.card,
+                    border: `1px solid ${colors.border}`,
+                    transition: "transform 0.2s, box-shadow 0.2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = `0 4px 12px ${colors.shadow}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      overflow: "hidden",
+                      backgroundColor: colors.border,
+                    }}
+                  >
+                    {sp.image_url && (
+                      <img
+                        src={sp.image_url}
+                        alt={sp.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    )}
+                  </div>
+                  <div style={{ padding: "8px 10px" }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: colors.text,
+                        lineHeight: 1.3,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {sp.name}
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0 0",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: colors.accent,
+                      }}
+                    >
+                      ${sp.price}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -362,12 +575,57 @@ function ProductDetailOverlay({
 // --- Main Widget ---
 
 export default function ProductCarousel() {
-  const { props, isPending, sendFollowUpMessage, openExternal } = useWidget<Props>();
+  const { props, isPending, callTool, openExternal } = useWidget<Props>();
   const colors = useColors();
   const [scrollOffset, setScrollOffset] = useState(0);
   const [clickedId, setClickedId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [recommendation, setRecommendation] = useState<string | null>(null);
+  const [isLoadingRec, setIsLoadingRec] = useState(false);
+  const [similarProducts, setSimilarProducts] = useState<
+    Array<{ id: string; name: string; image_url: string; price: string; labels: string[] }>
+  >([]);
   const carouselRef = useRef<HTMLDivElement>(null);
+
+  const { products, searchLabels } = props ?? { products: [], searchLabels: [] };
+
+  // Fetch personalized recommendation when a product is selected
+  useEffect(() => {
+    if (!selectedProduct) return;
+
+    let cancelled = false;
+    setIsLoadingRec(true);
+    setRecommendation(null);
+    setSimilarProducts([]);
+
+    const userPrefs = `User is searching for products targeting: ${searchLabels.join(", ")}. Show why this product is a great match for these specific skin concerns.`;
+
+    callTool("product-detail", {
+      product_id: Number(selectedProduct.id),
+      user_preferences: userPrefs,
+    })
+      .then((result: any) => {
+        if (cancelled) return;
+        // Extract from the tool result - the widget props contain the data
+        const content = result?.structuredContent?.props;
+        if (content?.personalized_description) {
+          setRecommendation(content.personalized_description);
+        }
+        if (content?.similar_products) {
+          setSimilarProducts(content.similar_products);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRecommendation(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingRec(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProduct?.id]);
 
   if (isPending) {
     return (
@@ -377,8 +635,7 @@ export default function ProductCarousel() {
             padding: "48px 20px",
             textAlign: "center",
             color: colors.textSecondary,
-            fontFamily:
-              '"Georgia", "Times New Roman", serif',
+            fontFamily: '"Georgia", "Times New Roman", serif',
           }}
         >
           <style>{`@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}`}</style>
@@ -408,23 +665,25 @@ export default function ProductCarousel() {
     );
   }
 
-  const handleProductClick = async (product: Product) => {
+  const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
     setClickedId(product.id);
-    try {
-      await sendFollowUpMessage(
-        `Show me the full details for "${product.name}" (product ID: ${product.id}). ` +
-          `Write a personalized recommendation based on my skin concerns from our conversation.`
-      );
-    } catch {
-      // Silently handle if follow-up fails
-    } finally {
-      setClickedId(null);
+  };
+
+  const handleSimilarProductClick = (id: string, name: string) => {
+    // Find the product in our list, or create a minimal version
+    const found = products.find((p) => p.id === id);
+    if (found) {
+      setSelectedProduct(found);
+      setClickedId(found.id);
     }
   };
 
   const handleCloseOverlay = () => {
     setSelectedProduct(null);
+    setClickedId(null);
+    setRecommendation(null);
+    setSimilarProducts([]);
   };
 
   const handleShopNow = (url: string) => {
@@ -442,7 +701,31 @@ export default function ProductCarousel() {
     setScrollOffset(newOffset);
   };
 
-  const { products, searchLabels } = props;
+  // When a product is selected, show the detail view instead of the carousel
+  if (selectedProduct) {
+    return (
+      <McpUseProvider autoSize>
+        <style>{`
+          @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+          @keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+          @keyframes shimmerSlide{0%{background-position:-400px 0}100%{background-position:400px 0}}
+          @keyframes overlayFadeIn{from{opacity:0}to{opacity:1}}
+          @keyframes overlaySlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        `}</style>
+        <ProductDetailView
+          product={selectedProduct}
+          searchLabels={searchLabels}
+          colors={colors}
+          recommendation={recommendation}
+          isLoadingRec={isLoadingRec}
+          similarProducts={similarProducts}
+          onClose={handleCloseOverlay}
+          onShopNow={handleShopNow}
+          onProductClick={handleSimilarProductClick}
+        />
+      </McpUseProvider>
+    );
+  }
 
   return (
     <McpUseProvider autoSize>
@@ -453,27 +736,13 @@ export default function ProductCarousel() {
           backgroundColor: colors.bg,
           color: colors.text,
           padding: "24px 0 20px",
-          position: "relative",
         }}
       >
         <style>{`
           @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
           @keyframes fadeInUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
           @keyframes shimmer{0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5}}
-          @keyframes overlayFadeIn{from{opacity:0}to{opacity:1}}
-          @keyframes overlaySlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
         `}</style>
-
-        {/* Full-screen product detail overlay */}
-        {selectedProduct && (
-          <ProductDetailOverlay
-            product={selectedProduct}
-            searchLabels={searchLabels}
-            colors={colors}
-            onClose={handleCloseOverlay}
-            onShopNow={handleShopNow}
-          />
-        )}
 
         {/* Header */}
         <div style={{ padding: "0 20px", marginBottom: 18 }}>
@@ -495,8 +764,7 @@ export default function ProductCarousel() {
               fontSize: 22,
               fontWeight: 700,
               letterSpacing: "-0.02em",
-              fontFamily:
-                '"Georgia", "Times New Roman", serif',
+              fontFamily: '"Georgia", "Times New Roman", serif',
             }}
           >
             Your Skincare Matches
@@ -618,16 +886,13 @@ export default function ProductCarousel() {
                     border: `1px solid ${colors.border}`,
                     borderRadius: 14,
                     overflow: "hidden",
-                    cursor: clickedId === product.id ? "wait" : "pointer",
+                    cursor: "pointer",
                     transition: "transform 0.2s ease, box-shadow 0.2s ease",
                     animation: `fadeInUp 0.4s ease-out ${i * 0.06}s both`,
-                    opacity: clickedId && clickedId !== product.id ? 0.5 : 1,
                   }}
                   onMouseEnter={(e) => {
-                    if (!clickedId) {
-                      e.currentTarget.style.transform = "translateY(-3px)";
-                      e.currentTarget.style.boxShadow = colors.cardHoverShadow;
-                    }
+                    e.currentTarget.style.transform = "translateY(-3px)";
+                    e.currentTarget.style.boxShadow = colors.cardHoverShadow;
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = "translateY(0)";
@@ -654,37 +919,11 @@ export default function ProductCarousel() {
                         transition: "transform 0.3s ease",
                       }}
                     />
-
-                    {/* Match score badge */}
                     <MatchBadge
                       score={matchScore}
                       total={searchLabels.length}
                       colors={colors}
                     />
-
-                    {clickedId === product.id && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          backgroundColor: "rgba(0,0,0,0.4)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 28,
-                            height: 28,
-                            border: "3px solid rgba(255,255,255,0.3)",
-                            borderTop: "3px solid #fff",
-                            borderRadius: "50%",
-                            animation: "spin 0.8s linear infinite",
-                          }}
-                        />
-                      </div>
-                    )}
                   </div>
 
                   {/* Product info */}
@@ -789,14 +1028,9 @@ export default function ProductCarousel() {
                           fontSize: 11,
                           color: colors.accentLight,
                           fontWeight: 600,
-                          ...(clickedId === product.id
-                            ? { animation: "shimmer 1.2s ease-in-out infinite" }
-                            : {}),
                         }}
                       >
-                        {clickedId === product.id
-                          ? "Getting details..."
-                          : "See why it's for you \u2192"}
+                        See why it's for you →
                       </span>
                     </div>
                   </div>
