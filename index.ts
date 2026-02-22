@@ -60,7 +60,9 @@ server.tool(
       "(3) If the user's concern is vague or no skin condition can be determined, ask clarifying follow-up questions — do NOT guess or assume conditions. " +
       "(4) You may combine multiple labels to find products that target several concerns at once. " +
       "Results are ranked by relevance (most matching labels first). " +
-      "IMPORTANT: After calling this tool, do NOT list out the products in text. The widget carousel already displays them visually. Just let the widget speak for itself — only add a brief 1-sentence summary if needed.",
+      "IMPORTANT: After calling this tool, do NOT list out the products in text. The widget carousel already displays them visually. " +
+      "Just say something like 'Here are your matches — tap any product to see why it's right for you.' " +
+      "Do NOT add skincare tips, routines, or lengthy explanations. Keep your response to 1 sentence max. The widget handles everything.",
     annotations: {
       readOnlyHint: true,
       openWorldHint: false,
@@ -165,7 +167,7 @@ server.tool(
           searchLabels: labels,
           userPreferences: user_preferences || "",
         },
-        output: text(""),
+        output: text(`Found ${matches.length} products. The carousel widget is displaying them — no need to list or describe them.`),
       });
     } catch (err: any) {
       console.error("get-products error:", err?.message || err);
