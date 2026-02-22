@@ -2,6 +2,16 @@
 
 Personalized skincare product recommendations, powered by MCP.
 
+> **Try it now** — Connect this MCP server to ChatGPT, Claude, or any MCP-compatible client:
+>
+> ```
+> https://shiny-mud-h5x9n.run.mcp-use.com/mcp
+> ```
+
+Built with the [MCP-Use SDK](https://www.npmjs.com/package/mcp-use) and deployed on [Manufact Cloud](https://mcp-use.com).
+
+---
+
 Two million people visit the [r/SkincareAddiction](https://www.reddit.com/r/SkincareAddiction/) subreddit every day looking for product recommendations — but most of what they find is generic advice that doesn't account for their unique skin type, concerns, or lifestyle.
 
 Everyone already uses AI assistants like ChatGPT and Claude. **What if your product search was personalized because your AI assistant already knows about you?**
@@ -80,7 +90,8 @@ Skin Care Addiction is an MCP app that connects to your AI assistant, searches a
 
 ## Tech Stack
 
-- **MCP Server** — Built with [mcp-use](https://www.npmjs.com/package/mcp-use), exposes two tools (`get-products`, `product-detail`) and two widget resources (product carousel, product detail)
+- **MCP Server** — Built with the [MCP-Use SDK](https://www.npmjs.com/package/mcp-use), exposes two tools (`get-products`, `product-detail`) and two widget resources (product carousel, product detail)
+- **Deployment** — Hosted on [Manufact Cloud](https://mcp-use.com) via `mcp-use deploy`
 - **Database** — Supabase (PostgreSQL) storing product catalog with labels, prices, images, and Amazon links
 - **LLM** — OpenAI `gpt-4o-mini` via LangChain for generating personalized recommendations with structured output
 - **Widgets** — React components rendered inline in the chat UI (carousel + detail view)
@@ -125,11 +136,13 @@ The server starts at `http://localhost:3000` with:
 - MCP endpoint: `http://localhost:3000/mcp`
 - Inspector UI: `http://localhost:3000/inspector`
 
-### Deploy
+### Deploy to Manufact Cloud
 
 ```bash
 npm run deploy:cloud
 ```
+
+This deploys the MCP server to [Manufact Cloud](https://mcp-use.com) and gives you a public MCP endpoint URL.
 
 ## Project Structure
 
