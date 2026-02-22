@@ -175,8 +175,16 @@ const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Structured output schema for personalized recommendations
+const ProductRecommendation = z.object({
+  personalized_description: z.string().describe("2-3 short sentences: what the product does, 1-2 key ingredients, why it suits the user. Keep concise."),
+  recommended_routine: z.string().describe("Brief AM/PM routine in 3-4 bullet points max. Under 50 words total."),
+});
+
+type ProductRecommendationResult = z.infer<typeof ProductRecommendation>;
+
 // In-memory cache for personalized recommendations (resets on server restart)
-const recommendationCache = new Map<string, string>();
+const recommendationCache = new Map<string, ProductRecommendationResult>();
 
 server.tool(
   {
@@ -252,17 +260,18 @@ server.tool(
     // Generate personalized description using LLM (with cache)
     try {
       const cacheKey = `${product_id}:${user_preferences}`;
-      let personalizedDescription = recommendationCache.get(cacheKey);
+      let recommendation = recommendationCache.get(cacheKey);
 
-      if (!personalizedDescription) {
-        const response = await llm.invoke([
+      if (!recommendation) {
+        const structuredLlm = llm.withStructuredOutput(ProductRecommendation);
+        recommendation = await structuredLlm.invoke([
           {
             role: "system",
             content:
-              "You are an expert skincare sales associate. Write a personalized 2-3 paragraph product recommendation. " +
-              "Be warm, knowledgeable, and specific about why this product suits the user's needs. " +
-              "Reference their specific concerns and explain how the product's ingredients or properties address them. " +
-              "Keep it concise and engaging.",
+              "You are an expert skincare sales associate. Provide a personalized product recommendation with two parts:\n" +
+              "1. personalized_description: 2-3 SHORT sentences explaining why this product suits the user's skin concerns. Mention 1-2 key ingredients. Be warm but very concise.\n" +
+              "2. recommended_routine: A brief AM/PM routine in 3-4 bullet points max. Just list the steps (e.g. 'AM: Cleanse → Moisturize → SPF'). Keep it under 50 words.\n\n" +
+              "IMPORTANT: Keep both fields SHORT and scannable. No long paragraphs.",
           },
           {
             role: "user",
@@ -275,15 +284,15 @@ server.tool(
           },
         ]);
 
-        personalizedDescription = String(response.content);
-        recommendationCache.set(cacheKey, personalizedDescription);
+        recommendationCache.set(cacheKey, recommendation);
       }
 
       return widget({
         props: {
           product_id,
           product_name: product.name,
-          personalized_description: personalizedDescription,
+          personalized_description: recommendation.personalized_description,
+          recommended_routine: recommendation.recommended_routine,
           labels: product.labels.join(", "),
           image_links: product.image_links?.[0] || "",
           product_link: product.product_link,
@@ -297,7 +306,7 @@ server.tool(
           })),
         },
         output: text(
-          `${product.name} — $${formatPrice(product.price)}\n\n${personalizedDescription}\n\nLabels: ${product.labels.join(", ")}\nBuy: ${product.product_link}`
+          `${product.name} — $${formatPrice(product.price)}\n\n${recommendation.personalized_description}\n\nRecommended Routine:\n${recommendation.recommended_routine}\n\nLabels: ${product.labels.join(", ")}\nBuy: ${product.product_link}`
         ),
       });
     } catch (err: any) {

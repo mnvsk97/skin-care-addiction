@@ -185,6 +185,7 @@ function ProductDetailView({
   searchLabels,
   colors,
   recommendation,
+  recommendedRoutine,
   isLoadingRec,
   similarProducts,
   onClose,
@@ -195,6 +196,7 @@ function ProductDetailView({
   searchLabels: string[];
   colors: ReturnType<typeof useColors>;
   recommendation: string | null;
+  recommendedRoutine: string | null;
   isLoadingRec: boolean;
   similarProducts: Array<{ id: string; name: string; image_url: string; price: string; labels: string[] }>;
   onClose: () => void;
@@ -205,6 +207,9 @@ function ProductDetailView({
   const matchScore = getMatchScore(product.labels, searchLabels);
   const paragraphs = recommendation
     ? recommendation.split("\n\n").filter((p) => p.trim())
+    : [];
+  const routineParagraphs = recommendedRoutine
+    ? recommendedRoutine.split("\n\n").filter((p) => p.trim())
     : [];
 
   return (
@@ -439,6 +444,51 @@ function ProductDetailView({
           </p>
         )}
 
+        {/* Recommended Routine */}
+        {!isLoadingRec && recommendedRoutine && (
+          <div
+            style={{
+              padding: "18px 20px",
+              backgroundColor: colors.cardInner,
+              borderRadius: 12,
+              marginBottom: 22,
+              borderLeft: `3px solid ${colors.accent}`,
+              animation: "overlayFadeIn 0.4s ease-out 0.1s both",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 8px 0",
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: colors.accentSoft,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>&#128337;</span>
+              Recommended Routine
+            </p>
+            {routineParagraphs.map((paragraph, i) => (
+              <p
+                key={i}
+                style={{
+                  margin: i === routineParagraphs.length - 1 ? 0 : "0 0 12px 0",
+                  fontSize: 14,
+                  lineHeight: 1.75,
+                  color: colors.text,
+                  whiteSpace: "pre-line",
+                }}
+              >
+                {paragraph.trim()}
+              </p>
+            ))}
+          </div>
+        )}
+
         {/* Shop Now CTA */}
         <button
           onClick={() => onShopNow(product.product_link)}
@@ -581,6 +631,7 @@ export default function ProductCarousel() {
   const [clickedId, setClickedId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [recommendation, setRecommendation] = useState<string | null>(null);
+  const [recommendedRoutine, setRecommendedRoutine] = useState<string | null>(null);
   const [isLoadingRec, setIsLoadingRec] = useState(false);
   const [similarProducts, setSimilarProducts] = useState<
     Array<{ id: string; name: string; image_url: string; price: string; labels: string[] }>
@@ -596,6 +647,7 @@ export default function ProductCarousel() {
     let cancelled = false;
     setIsLoadingRec(true);
     setRecommendation(null);
+    setRecommendedRoutine(null);
     setSimilarProducts([]);
 
     const userPrefs = `User is searching for products targeting: ${searchLabels.join(", ")}. Show why this product is a great match for these specific skin concerns.`;
@@ -606,16 +658,20 @@ export default function ProductCarousel() {
     })
       .then((result: any) => {
         if (cancelled) return;
-        // Extract from the tool result - the widget props contain the data
-        const content = result?.structuredContent?.props;
+        // structuredContent holds widget props directly (not nested under .props)
+        const content = result?.structuredContent;
         if (content?.personalized_description) {
-          setRecommendation(content.personalized_description);
+          setRecommendation(content.personalized_description as string);
+        }
+        if (content?.recommended_routine) {
+          setRecommendedRoutine(content.recommended_routine as string);
         }
         if (content?.similar_products) {
-          setSimilarProducts(content.similar_products);
+          setSimilarProducts(content.similar_products as any);
         }
       })
-      .catch(() => {
+      .catch((err: any) => {
+        console.error("product-detail callTool error:", err);
         if (!cancelled) setRecommendation(null);
       })
       .finally(() => {
@@ -683,6 +739,7 @@ export default function ProductCarousel() {
     setSelectedProduct(null);
     setClickedId(null);
     setRecommendation(null);
+    setRecommendedRoutine(null);
     setSimilarProducts([]);
   };
 
@@ -717,6 +774,7 @@ export default function ProductCarousel() {
           searchLabels={searchLabels}
           colors={colors}
           recommendation={recommendation}
+          recommendedRoutine={recommendedRoutine}
           isLoadingRec={isLoadingRec}
           similarProducts={similarProducts}
           onClose={handleCloseOverlay}

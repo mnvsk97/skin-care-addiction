@@ -10,6 +10,7 @@ const propsSchema = z.object({
   product_id: z.number(),
   product_name: z.string(),
   personalized_description: z.string(),
+  recommended_routine: z.string().optional(),
   labels: z.string(),
   image_links: z.string(),
   product_link: z.string(),
@@ -223,6 +224,9 @@ export default function ProductDetail() {
   const paragraphs = props.personalized_description
     .split("\n\n")
     .filter((p) => p.trim());
+  const routineParagraphs = props.recommended_routine
+    ? props.recommended_routine.split("\n\n").filter((p) => p.trim())
+    : [];
 
   return (
     <McpUseProvider autoSize>
@@ -387,6 +391,50 @@ export default function ProductDetail() {
               </p>
             ))}
           </div>
+
+          {/* Recommended Routine */}
+          {routineParagraphs.length > 0 && (
+            <div
+              style={{
+                padding: "18px 20px",
+                backgroundColor: colors.cardInner,
+                borderRadius: 12,
+                marginBottom: 22,
+                borderLeft: `3px solid ${colors.accent}`,
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 8px 0",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: colors.accent,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>&#128337;</span>
+                Recommended Routine
+              </p>
+              {routineParagraphs.map((paragraph, i) => (
+                <p
+                  key={i}
+                  style={{
+                    margin: i === routineParagraphs.length - 1 ? 0 : "0 0 12px 0",
+                    fontSize: 14,
+                    lineHeight: 1.75,
+                    color: colors.text,
+                    whiteSpace: "pre-line",
+                  }}
+                >
+                  {paragraph.trim()}
+                </p>
+              ))}
+            </div>
+          )}
 
           {/* CTA */}
           <button
